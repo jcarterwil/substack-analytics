@@ -15,11 +15,40 @@ import {
   Pie,
   Cell,
 } from 'recharts'
-import type { AnalysisResult, PostMetadata } from '@/lib/types'
+import type { AnalysisResult, PostMetadata, Subscriber } from '@/lib/types'
 
 interface DashboardProps {
   result: AnalysisResult
   onReset: () => void
+}
+
+function downloadFile(content: string, filename: string, type: string) {
+  const blob = new Blob([content], { type })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+function generateSubscribersCSV(subscribers: Subscriber[]): string {
+  if (subscribers.length === 0) return ''
+
+  const headers = ['email', 'active_subscription', 'plan', 'created_at', 'first_payment_at', 'email_disabled', 'expiry']
+  const rows = subscribers.map(sub => [
+    sub.email,
+    sub.active_subscription ? 'true' : 'false',
+    sub.plan,
+    sub.created_at,
+    sub.first_payment_at || '',
+    sub.email_disabled ? 'true' : 'false',
+    sub.expiry || ''
+  ])
+
+  return [headers.join(','), ...rows.map(row => row.map(cell => `"${cell}"`).join(','))].join('\n')
 }
 
 function htmlToText(html: string): string {
@@ -61,15 +90,18 @@ function htmlToText(html: string): string {
 
 function generateMarkdown(posts: PostMetadata[]): string {
   const publishedPosts = posts
-    .filter(p => p.is_published && p.htmlContent)
+    .filter(p => p.is_published)
     .sort((a, b) => {
       const dateA = a.post_date ? new Date(a.post_date).getTime() : 0
       const dateB = b.post_date ? new Date(b.post_date).getTime() : 0
       return dateA - dateB // Chronological order
     })
 
+  const postsWithContent = publishedPosts.filter(p => p.htmlContent).length
+
   let markdown = `# Substack Archive\n\n`
-  markdown += `Total Posts: ${publishedPosts.length}\n\n`
+  markdown += `Total Published Posts: ${publishedPosts.length}\n`
+  markdown += `Posts with Content: ${postsWithContent}\n\n`
   markdown += `---\n\n`
 
   for (const post of publishedPosts) {
@@ -86,24 +118,14 @@ function generateMarkdown(posts: PostMetadata[]): string {
 
     if (post.htmlContent) {
       markdown += htmlToText(post.htmlContent)
+    } else {
+      markdown += `*[No content available]*`
     }
 
     markdown += `\n\n---\n\n`
   }
 
   return markdown
-}
-
-function downloadMarkdown(content: string, filename: string) {
-  const blob = new Blob([content], { type: 'text/markdown' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
 }
 
 function StatCard({ label, value, subtext }: { label: string; value: string | number; subtext?: string }) {
@@ -119,7 +141,7 @@ function StatCard({ label, value, subtext }: { label: string; value: string | nu
 const COLORS = ['#f97316', '#fb923c', '#fdba74', '#fed7aa', '#ffedd5']
 
 export default function Dashboard({ result, onReset }: DashboardProps) {
-  const { posts, subscriberStats, monthlyTrends, topPosts } = result
+  const { posts, subscribers, subscriberStats, monthlyTrends, topPosts } = result
 
   const publishedPosts = posts.filter(p => p.is_published)
   const draftPosts = posts.filter(p => !p.is_published)
@@ -161,15 +183,33 @@ export default function Dashboard({ result, onReset }: DashboardProps) {
             <button
               onClick={() => {
                 const markdown = generateMarkdown(posts)
-                downloadMarkdown(markdown, 'substack-archive.md')
+                if (markdown) {
+                  downloadFile(markdown, 'substack-articles.md', 'text/markdown')
+                } else {
+                  alert('No published posts to export')
+                }
               }}
               className="px-4 py-2 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 transition-colors flex items-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
-              Export Markdown
+              Export Articles (MD)
             </button>
+            {subscribers.length > 0 && (
+              <button
+                onClick={() => {
+                  const csv = generateSubscribersCSV(subscribers)
+                  downloadFile(csv, 'substack-subscribers.csv', 'text/csv')
+                }}
+                className="px-4 py-2 bg-gray-700 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Export Subscribers (CSV)
+              </button>
+            )}
             <button
               onClick={onReset}
               className="px-4 py-2 text-gray-600 hover:text-gray-900 font-medium"
