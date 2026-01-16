@@ -1,0 +1,82 @@
+[
+  {
+    "country": "US",
+    "count": 238013
+  },
+  {
+    "country": "NL",
+    "count": 16026
+  },
+  {
+    "country": "GB",
+    "count": 3795
+  },
+  {
+    "country": "CA",
+    "count": 2867
+  },
+  {
+    "country": "IN",
+    "count": 2051
+  },
+  {
+    "country": "AU",
+    "count": 1557
+  },
+  {
+    "country": "FR",
+    "count": 1236
+  },
+  {
+    "country": "CH",
+    "count": 915
+  },
+  {
+    "country": "HK",
+    "count": 862
+  },
+  {
+    "country": "NZ",
+    "count": 554
+  },
+  {
+    "country": "ES",
+    "count": 506
+  },
+  {
+    "country": "AE",
+    "count": 396
+  },
+  {
+    "country": "BE",
+    "count": 356
+  },
+  {
+    "country": "MX",
+    "count": 336
+  },
+  {
+    "country": "IE",
+    "count": 325
+  },
+  {
+    "country": "DE",
+    "count": 300
+  },
+  {
+    "country": "KW",
+    "count": 239
+  },
+  {
+    "country": "AR",
+    "count": 229
+  },
+  {
+    "country": "PE",
+    "count": 225
+  },
+  {
+    "country": "IT",
+    "count": 203
+  }
+]

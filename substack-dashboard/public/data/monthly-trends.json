@@ -1,0 +1,121 @@
+[
+  {
+    "month": "2024-09",
+    "posts": 1,
+    "delivered": 34,
+    "opened": 21,
+    "openRate": 61.76470588235294
+  },
+  {
+    "month": "2024-10",
+    "posts": 2,
+    "delivered": 83,
+    "opened": 41,
+    "openRate": 49.39759036144578
+  },
+  {
+    "month": "2024-11",
+    "posts": 1,
+    "delivered": 54,
+    "opened": 26,
+    "openRate": 48.148148148148145
+  },
+  {
+    "month": "2024-12",
+    "posts": 2,
+    "delivered": 140,
+    "opened": 86,
+    "openRate": 61.42857142857143
+  },
+  {
+    "month": "2025-01",
+    "posts": 23,
+    "delivered": 3888,
+    "opened": 2258,
+    "openRate": 58.07613168724279
+  },
+  {
+    "month": "2025-02",
+    "posts": 25,
+    "delivered": 10166,
+    "opened": 5902,
+    "openRate": 58.05626598465473
+  },
+  {
+    "month": "2025-03",
+    "posts": 27,
+    "delivered": 17097,
+    "opened": 9554,
+    "openRate": 55.88114873954495
+  },
+  {
+    "month": "2025-04",
+    "posts": 26,
+    "delivered": 18491,
+    "opened": 10248,
+    "openRate": 55.421556432859234
+  },
+  {
+    "month": "2025-05",
+    "posts": 27,
+    "delivered": 21371,
+    "opened": 11435,
+    "openRate": 53.50708904590332
+  },
+  {
+    "month": "2025-06",
+    "posts": 24,
+    "delivered": 21785,
+    "opened": 11652,
+    "openRate": 53.4863438145513
+  },
+  {
+    "month": "2025-07",
+    "posts": 22,
+    "delivered": 23039,
+    "opened": 11709,
+    "openRate": 50.82251833846955
+  },
+  {
+    "month": "2025-08",
+    "posts": 21,
+    "delivered": 24575,
+    "opened": 12608,
+    "openRate": 51.30417090539166
+  },
+  {
+    "month": "2025-09",
+    "posts": 16,
+    "delivered": 19924,
+    "opened": 10204,
+    "openRate": 51.21461553904838
+  },
+  {
+    "month": "2025-10",
+    "posts": 19,
+    "delivered": 23336,
+    "opened": 11772,
+    "openRate": 50.44566335275968
+  },
+  {
+    "month": "2025-11",
+    "posts": 9,
+    "delivered": 12500,
+    "opened": 6378,
+    "openRate": 51.024
+  },
+  {
+    "month": "2025-12",
+    "posts": 9,
+    "delivered": 13822,
+    "opened": 6834,
+    "openRate": 49.442917088699176
+  },
+  {
+    "month": "2026-01",
+    "posts": 11,
+    "delivered": 22079,
+    "opened": 9956,
+    "openRate": 45.09262194845781
+  }
+]

@@ -1,0 +1,33 @@
+{
+  "name": "substack-processor",
+  "version": "1.0.0",
+  "description": "CLI tool to process Food is Health Substack archive",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts"
+  },
+  "keywords": ["substack", "newsletter", "analytics", "markdown"],
+  "author": "Carter Williams",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "date-fns": "^3.6.0",
+    "fs-extra": "^11.2.0",
+    "glob": "^10.4.5",
+    "ora": "^8.0.1",
+    "papaparse": "^5.4.1",
+    "turndown": "^7.2.0"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^20.14.12",
+    "@types/papaparse": "^5.3.14",
+    "@types/turndown": "^5.0.5",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4"
+  }
+}

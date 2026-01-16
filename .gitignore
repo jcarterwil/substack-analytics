@@ -1,0 +1,40 @@
+# Ignore zip files
+*.zip
+
+# Ignore output directory
+output/
+
+# Ignore raw archive data (contains subscriber emails)
+archive/
+
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+
+# Build
+dist/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Claude
+.claude/

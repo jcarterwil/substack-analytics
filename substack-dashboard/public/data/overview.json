@@ -1,0 +1,14 @@
+{
+  "totalPosts": 277,
+  "postsWithAnalytics": 265,
+  "totalDelivered": 232384,
+  "totalOpened": 273604,
+  "averageOpenRate": 53.64,
+  "subscribers": {
+    "total": 2751,
+    "active": 70,
+    "paid": 59,
+    "free": 11,
+    "churned": 0
+  }
+}
