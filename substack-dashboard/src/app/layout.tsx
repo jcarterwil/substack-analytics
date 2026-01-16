@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Food Is Health - Analytics Dashboard",
-  description: "Substack analytics dashboard for Food Is Health newsletter",
+  title: "Substack Analyzer - Understand Your Newsletter",
+  description: "Upload your Substack export to get insights about your posts, subscribers, and growth trends. Privacy-first: all processing happens in your browser.",
 };
 
 export default function RootLayout({
@@ -26,14 +25,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-50`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <div className="flex min-h-screen">
-          <Sidebar />
-          <main className="flex-1 p-8">
-            {children}
-          </main>
-        </div>
+        {children}
       </body>
     </html>
   );
