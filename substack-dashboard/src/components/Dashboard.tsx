@@ -16,7 +16,7 @@ import {
   Pie,
   Cell,
 } from 'recharts'
-import type { AnalysisResult, PostMetadata, Subscriber, AttributionResult } from '@/lib/types'
+import type { AnalysisResult, PostMetadata, Subscriber, AttributionResult, AnalyticsData, PostMetrics } from '@/lib/types'
 
 interface DashboardProps {
   result: AnalysisResult
@@ -140,11 +140,15 @@ function StatCard({ label, value, subtext }: { label: string; value: string | nu
 }
 
 const COLORS = ['#f97316', '#fb923c', '#fdba74', '#fed7aa', '#ffedd5']
+const DEVICE_COLORS = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444']
+const GEO_COLORS = ['#f97316', '#fb923c', '#fdba74', '#fed7aa', '#ffedd5', '#fef3c7', '#fde68a', '#fcd34d', '#fbbf24', '#f59e0b']
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 export default function Dashboard({ result, onReset }: DashboardProps) {
-  const { posts, subscribers, subscriberStats, monthlyTrends, topPosts, attributionResults } = result
+  const { posts, subscribers, subscriberStats, monthlyTrends, topPosts, attributionResults, analyticsData } = result
   const [selectedWindow, setSelectedWindow] = useState(2) // Default to 7-day window (index 2)
   const [viewingPost, setViewingPost] = useState<PostMetadata | null>(null)
+  const [performanceSort, setPerformanceSort] = useState<'openRate' | 'delivered' | 'uniqueOpens' | 'date'>('openRate')
 
   const publishedPosts = posts.filter(p => p.is_published)
   const draftPosts = posts.filter(p => !p.is_published)
@@ -168,6 +172,43 @@ export default function Dashboard({ result, onReset }: DashboardProps) {
   for (const post of posts) {
     postsByType[post.type] = (postsByType[post.type] || 0) + 1
   }
+
+  // Sort post metrics for performance table
+  const sortedPostMetrics = analyticsData?.postMetrics
+    ? [...analyticsData.postMetrics].sort((a, b) => {
+        switch (performanceSort) {
+          case 'openRate':
+            return b.openRate - a.openRate
+          case 'delivered':
+            return b.delivered - a.delivered
+          case 'uniqueOpens':
+            return b.uniqueOpens - a.uniqueOpens
+          case 'date':
+            return new Date(b.post_date).getTime() - new Date(a.post_date).getTime()
+          default:
+            return 0
+        }
+      })
+    : []
+
+  // Helper function for open rate color coding
+  const getOpenRateColor = (rate: number) => {
+    if (rate >= 50) return 'text-green-600 bg-green-50'
+    if (rate >= 30) return 'text-yellow-600 bg-yellow-50'
+    return 'text-red-600 bg-red-50'
+  }
+
+  // Prepare hourly chart data
+  const hourlyChartData = analyticsData?.hourlyStats.map((count, hour) => ({
+    hour: `${hour.toString().padStart(2, '0')}:00`,
+    opens: count,
+  })) || []
+
+  // Prepare daily chart data
+  const dailyChartData = analyticsData?.dailyStats.map((count, day) => ({
+    day: DAY_NAMES[day],
+    opens: count,
+  })) || []
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -507,6 +548,211 @@ export default function Dashboard({ result, onReset }: DashboardProps) {
               )}
             </div>
           </div>
+        )}
+
+        {/* Email Performance Analytics Section */}
+        {analyticsData && analyticsData.postMetrics.length > 0 && (
+          <>
+            {/* Post Performance Table */}
+            <div className="bg-white rounded-xl border border-gray-100 mb-8">
+              <div className="px-6 py-4 border-b border-gray-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Email Performance</h3>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {analyticsData.totalOpens.toLocaleString()} total opens across {analyticsData.postMetrics.length} posts
+                    </p>
+                  </div>
+                  <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+                    {(['openRate', 'delivered', 'uniqueOpens', 'date'] as const).map((sort) => (
+                      <button
+                        key={sort}
+                        onClick={() => setPerformanceSort(sort)}
+                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                          performanceSort === sort
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        {sort === 'openRate' ? 'Open Rate' : sort === 'uniqueOpens' ? 'Opens' : sort === 'delivered' ? 'Delivered' : 'Date'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Post</th>
+                      <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Date</th>
+                      <th className="text-right px-6 py-3 text-sm font-medium text-gray-500">Delivered</th>
+                      <th className="text-right px-6 py-3 text-sm font-medium text-gray-500">Unique Opens</th>
+                      <th className="text-right px-6 py-3 text-sm font-medium text-gray-500">Open Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {sortedPostMetrics.slice(0, 20).map((post, index) => (
+                      <tr key={post.post_id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-400 w-6">{index + 1}</span>
+                            <span className="font-medium text-gray-900 truncate max-w-md">{post.title}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {post.post_date ? format(new Date(post.post_date), 'MMM d, yyyy') : '-'}
+                        </td>
+                        <td className="px-6 py-4 text-right text-sm text-gray-600">
+                          {post.delivered.toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 text-right text-sm text-gray-600">
+                          {post.uniqueOpens.toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <span className={`inline-flex px-2 py-1 text-sm font-medium rounded ${getOpenRateColor(post.openRate)}`}>
+                            {post.openRate}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {sortedPostMetrics.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    No email performance data available
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Geographic & Time Analysis Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+              {/* Geographic Insights */}
+              {analyticsData.geoStats.length > 0 && (
+                <div className="bg-white rounded-xl p-6 border border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Reader Locations</h3>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart
+                      data={analyticsData.geoStats.slice(0, 10)}
+                      layout="vertical"
+                      margin={{ left: 10, right: 20 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis type="number" tick={{ fontSize: 12 }} />
+                      <YAxis
+                        type="category"
+                        dataKey="country"
+                        width={120}
+                        tick={{ fontSize: 11 }}
+                        tickFormatter={(value) => value.length > 15 ? value.slice(0, 15) + '...' : value}
+                      />
+                      <Tooltip
+                        formatter={(value, name, props) => [
+                          `${Number(value).toLocaleString()} (${props.payload.percentage}%)`,
+                          'Opens'
+                        ]}
+                      />
+                      <Bar dataKey="opens" radius={[0, 4, 4, 0]}>
+                        {analyticsData.geoStats.slice(0, 10).map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={GEO_COLORS[index % GEO_COLORS.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* Best Time to Post */}
+              <div className="bg-white rounded-xl p-6 border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Best Time to Post</h3>
+                <div className="space-y-4">
+                  {/* Hourly Chart */}
+                  <div>
+                    <p className="text-sm text-gray-500 mb-2">Opens by Hour of Day</p>
+                    <ResponsiveContainer width="100%" height={120}>
+                      <BarChart data={hourlyChartData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis dataKey="hour" tick={{ fontSize: 10 }} interval={2} />
+                        <YAxis tick={{ fontSize: 10 }} width={40} />
+                        <Tooltip formatter={(value) => [Number(value).toLocaleString(), 'Opens']} />
+                        <Bar dataKey="opens" fill="#f97316" radius={[2, 2, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  {/* Daily Chart */}
+                  <div>
+                    <p className="text-sm text-gray-500 mb-2">Opens by Day of Week</p>
+                    <ResponsiveContainer width="100%" height={120}>
+                      <BarChart data={dailyChartData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+                        <YAxis tick={{ fontSize: 10 }} width={40} />
+                        <Tooltip formatter={(value) => [Number(value).toLocaleString(), 'Opens']} />
+                        <Bar dataKey="opens" fill="#fb923c" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Device & Client Analytics Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+              {/* Device Breakdown */}
+              {analyticsData.deviceStats.length > 0 && (
+                <div className="bg-white rounded-xl p-6 border border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Device Types</h3>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie
+                        data={analyticsData.deviceStats}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        paddingAngle={2}
+                        dataKey="count"
+                        nameKey="device"
+                        label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                      >
+                        {analyticsData.deviceStats.map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={DEVICE_COLORS[index % DEVICE_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => [Number(value).toLocaleString(), 'Opens']} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* Email Client Breakdown */}
+              {analyticsData.clientStats.length > 0 && (
+                <div className="bg-white rounded-xl p-6 border border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Email Clients</h3>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart
+                      data={analyticsData.clientStats.slice(0, 8)}
+                      layout="vertical"
+                      margin={{ left: 10, right: 20 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis type="number" tick={{ fontSize: 12 }} />
+                      <YAxis
+                        type="category"
+                        dataKey="client"
+                        width={100}
+                        tick={{ fontSize: 11 }}
+                        tickFormatter={(value) => value.length > 12 ? value.slice(0, 12) + '...' : value}
+                      />
+                      <Tooltip formatter={(value) => [Number(value).toLocaleString(), 'Opens']} />
+                      <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+          </>
         )}
 
         {/* Recent Posts Table */}

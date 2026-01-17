@@ -1,6 +1,6 @@
 import JSZip from 'jszip'
 import Papa from 'papaparse'
-import type { PostMetadata, Subscriber, SubscriberStats, MonthlyTrend, AnalysisResult, PostAttribution, AttributionResult } from './types'
+import type { PostMetadata, Subscriber, SubscriberStats, MonthlyTrend, AnalysisResult, PostAttribution, AttributionResult, AnalyticsData, PostMetrics, GeoStats, DeviceStats, ClientStats } from './types'
 
 interface RawPostRow {
   post_id: string
@@ -22,6 +22,19 @@ interface RawSubscriberRow {
   email_disabled: string
   created_at: string
   first_payment_at: string
+}
+
+interface RawOpenRow {
+  email: string
+  timestamp: string
+  country: string
+  device_type: string
+  client_type: string
+}
+
+interface RawDeliverRow {
+  email: string
+  timestamp: string
 }
 
 function parsePostId(postIdField: string): { id: string; slug?: string } {
@@ -240,6 +253,175 @@ function calculatePostAttributions(
   }
 }
 
+function extractPostIdFromFilename(filename: string): string {
+  // Extract post ID from filenames like "posts/123456.opens.csv" or "posts/123456.slug-name.opens.csv"
+  const baseName = filename.split('/').pop() || ''
+  const parts = baseName.split('.')
+  return parts[0] // The numeric ID is always first
+}
+
+async function parseEmailMetrics(
+  zip: JSZip,
+  posts: PostMetadata[]
+): Promise<AnalyticsData> {
+  // Build a map of post_id -> post info for quick lookups
+  const postMap = new Map<string, PostMetadata>()
+  for (const post of posts) {
+    postMap.set(post.post_id, post)
+  }
+
+  // Track opens and delivers per post
+  const postOpens = new Map<string, Set<string>>() // post_id -> unique emails that opened
+  const postDelivers = new Map<string, number>() // post_id -> delivery count
+
+  // Global aggregates
+  const countryOpens = new Map<string, number>()
+  const hourlyOpens = new Array(24).fill(0)
+  const dailyOpens = new Array(7).fill(0)
+  const deviceOpens = new Map<string, number>()
+  const clientOpens = new Map<string, number>()
+
+  let totalOpens = 0
+
+  // Find and process all opens.csv and delivers.csv files
+  const allFiles = Object.entries(zip.files).filter(([, entry]) => !entry.dir)
+
+  for (const [filename, zipEntry] of allFiles) {
+    const normalizedPath = filename.replace(/\\/g, '/')
+    const lowercasePath = normalizedPath.toLowerCase()
+
+    // Parse opens.csv files
+    if (lowercasePath.endsWith('.opens.csv')) {
+      const postId = extractPostIdFromFilename(normalizedPath)
+      const csvContent = await zipEntry.async('string')
+
+      const result = Papa.parse<RawOpenRow>(csvContent, {
+        header: true,
+        skipEmptyLines: true,
+      })
+
+      // Initialize set for unique opens for this post
+      if (!postOpens.has(postId)) {
+        postOpens.set(postId, new Set())
+      }
+
+      for (const row of result.data) {
+        if (!row.email) continue
+
+        // Track unique opens per post
+        postOpens.get(postId)!.add(row.email)
+        totalOpens++
+
+        // Aggregate country data
+        const country = row.country || 'Unknown'
+        countryOpens.set(country, (countryOpens.get(country) || 0) + 1)
+
+        // Aggregate time data
+        if (row.timestamp) {
+          try {
+            const date = new Date(row.timestamp)
+            const hour = date.getHours()
+            const day = date.getDay() // 0 = Sunday
+            hourlyOpens[hour]++
+            dailyOpens[day]++
+          } catch {
+            // Skip invalid timestamps
+          }
+        }
+
+        // Aggregate device data
+        const device = row.device_type || 'Unknown'
+        deviceOpens.set(device, (deviceOpens.get(device) || 0) + 1)
+
+        // Aggregate client data
+        const client = row.client_type || 'Unknown'
+        clientOpens.set(client, (clientOpens.get(client) || 0) + 1)
+      }
+
+      console.log(`Parsed opens for post ${postId}: ${postOpens.get(postId)?.size || 0} unique opens`)
+    }
+
+    // Parse delivers.csv files
+    if (lowercasePath.endsWith('.delivers.csv')) {
+      const postId = extractPostIdFromFilename(normalizedPath)
+      const csvContent = await zipEntry.async('string')
+
+      const result = Papa.parse<RawDeliverRow>(csvContent, {
+        header: true,
+        skipEmptyLines: true,
+      })
+
+      postDelivers.set(postId, result.data.length)
+      console.log(`Parsed delivers for post ${postId}: ${result.data.length} delivered`)
+    }
+  }
+
+  // Calculate per-post metrics
+  const postMetrics: PostMetrics[] = []
+  for (const [postId, uniqueEmails] of postOpens.entries()) {
+    const post = postMap.get(postId)
+    const delivered = postDelivers.get(postId) || 0
+    const uniqueOpens = uniqueEmails.size
+    const openRate = delivered > 0 ? (uniqueOpens / delivered) * 100 : 0
+
+    postMetrics.push({
+      post_id: postId,
+      title: post?.title || 'Unknown Post',
+      post_date: post?.post_date || '',
+      delivered,
+      uniqueOpens,
+      openRate: Math.round(openRate * 10) / 10,
+    })
+  }
+
+  // Sort by open rate descending
+  postMetrics.sort((a, b) => b.openRate - a.openRate)
+
+  // Calculate geographic stats
+  const geoStats: GeoStats[] = []
+  for (const [country, opens] of countryOpens.entries()) {
+    geoStats.push({
+      country,
+      opens,
+      percentage: totalOpens > 0 ? Math.round((opens / totalOpens) * 1000) / 10 : 0,
+    })
+  }
+  geoStats.sort((a, b) => b.opens - a.opens)
+
+  // Calculate device stats
+  const deviceStats: DeviceStats[] = []
+  for (const [device, count] of deviceOpens.entries()) {
+    deviceStats.push({ device, count })
+  }
+  deviceStats.sort((a, b) => b.count - a.count)
+
+  // Calculate client stats
+  const clientStats: ClientStats[] = []
+  for (const [client, count] of clientOpens.entries()) {
+    clientStats.push({ client, count })
+  }
+  clientStats.sort((a, b) => b.count - a.count)
+
+  // Calculate total delivered
+  let totalDelivered = 0
+  for (const count of postDelivers.values()) {
+    totalDelivered += count
+  }
+
+  console.log(`Analytics summary: ${postMetrics.length} posts, ${totalOpens} opens, ${geoStats.length} countries`)
+
+  return {
+    postMetrics,
+    geoStats,
+    hourlyStats: hourlyOpens,
+    dailyStats: dailyOpens,
+    deviceStats,
+    clientStats,
+    totalOpens,
+    totalDelivered,
+  }
+}
+
 export async function parseSubstackZip(file: File): Promise<AnalysisResult> {
   const zip = await JSZip.loadAsync(file)
 
@@ -340,6 +522,9 @@ export async function parseSubstackZip(file: File): Promise<AnalysisResult> {
     ? [1, 2, 7].map(days => calculatePostAttributions(posts, subscribers, days))
     : []
 
+  // Parse email metrics (opens.csv and delivers.csv)
+  const analyticsData = await parseEmailMetrics(zip, posts)
+
   return {
     posts,
     subscribers,
@@ -347,5 +532,6 @@ export async function parseSubstackZip(file: File): Promise<AnalysisResult> {
     monthlyTrends,
     topPosts,
     attributionResults,
+    analyticsData,
   }
 }
