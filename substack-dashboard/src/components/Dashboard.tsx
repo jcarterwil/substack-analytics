@@ -144,6 +144,7 @@ const COLORS = ['#f97316', '#fb923c', '#fdba74', '#fed7aa', '#ffedd5']
 export default function Dashboard({ result, onReset }: DashboardProps) {
   const { posts, subscribers, subscriberStats, monthlyTrends, topPosts, attributionResults } = result
   const [selectedWindow, setSelectedWindow] = useState(2) // Default to 7-day window (index 2)
+  const [viewingPost, setViewingPost] = useState<PostMetadata | null>(null)
 
   const publishedPosts = posts.filter(p => p.is_published)
   const draftPosts = posts.filter(p => !p.is_published)
@@ -170,6 +171,50 @@ export default function Dashboard({ result, onReset }: DashboardProps) {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Post Viewer Modal */}
+      {viewingPost && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setViewingPost(null)}>
+          <div
+            className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">{viewingPost.title || 'Untitled'}</h2>
+                {viewingPost.subtitle && (
+                  <p className="text-gray-500 mt-1">{viewingPost.subtitle}</p>
+                )}
+                <div className="flex items-center gap-3 mt-2 text-sm text-gray-500">
+                  {viewingPost.post_date && (
+                    <span>{format(new Date(viewingPost.post_date), 'MMMM d, yyyy')}</span>
+                  )}
+                  <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded capitalize">{viewingPost.type}</span>
+                  <span className="capitalize">{viewingPost.audience}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewingPost(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1">
+              {viewingPost.htmlContent ? (
+                <div
+                  className="prose prose-gray max-w-none"
+                  dangerouslySetInnerHTML={{ __html: viewingPost.htmlContent }}
+                />
+              ) : (
+                <p className="text-gray-500 text-center py-12">No content available for this post</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-8 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -477,6 +522,7 @@ export default function Dashboard({ result, onReset }: DashboardProps) {
                   <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Date</th>
                   <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Type</th>
                   <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Audience</th>
+                  <th className="text-right px-6 py-3 text-sm font-medium text-gray-500">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -497,6 +543,19 @@ export default function Dashboard({ result, onReset }: DashboardProps) {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600 capitalize">{post.audience}</td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        onClick={() => setViewingPost(post)}
+                        className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                          post.htmlContent
+                            ? 'bg-orange-500 text-white hover:bg-orange-600'
+                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        }`}
+                        disabled={!post.htmlContent}
+                      >
+                        View
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

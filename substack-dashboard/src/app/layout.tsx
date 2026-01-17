@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Substack Analyzer - Understand Your Newsletter",
   description: "Upload your Substack export to get insights about your posts, subscribers, and growth trends. Privacy-first: all processing happens in your browser.",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
