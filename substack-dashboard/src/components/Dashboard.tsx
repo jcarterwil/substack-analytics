@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { format } from 'date-fns'
 import {
   LineChart,
@@ -15,7 +16,7 @@ import {
   Pie,
   Cell,
 } from 'recharts'
-import type { AnalysisResult, PostMetadata, Subscriber } from '@/lib/types'
+import type { AnalysisResult, PostMetadata, Subscriber, AttributionResult } from '@/lib/types'
 
 interface DashboardProps {
   result: AnalysisResult
@@ -141,7 +142,8 @@ function StatCard({ label, value, subtext }: { label: string; value: string | nu
 const COLORS = ['#f97316', '#fb923c', '#fdba74', '#fed7aa', '#ffedd5']
 
 export default function Dashboard({ result, onReset }: DashboardProps) {
-  const { posts, subscribers, subscriberStats, monthlyTrends, topPosts } = result
+  const { posts, subscribers, subscriberStats, monthlyTrends, topPosts, attributionResults } = result
+  const [selectedWindow, setSelectedWindow] = useState(2) // Default to 7-day window (index 2)
 
   const publishedPosts = posts.filter(p => p.is_published)
   const draftPosts = posts.filter(p => !p.is_published)
@@ -334,6 +336,133 @@ export default function Dashboard({ result, onReset }: DashboardProps) {
             </div>
           </div>
         </div>
+
+        {/* Post Attribution Analysis */}
+        {attributionResults && attributionResults.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-100 mb-8">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Top Performing Posts</h3>
+                <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+                  {attributionResults.map((result, index) => (
+                    <button
+                      key={result.windowDays}
+                      onClick={() => setSelectedWindow(index)}
+                      className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                        selectedWindow === index
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      {result.windowDays === 1 ? '1 Day' : `${result.windowDays} Days`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="text-sm text-gray-500 mt-1">
+                Subscribers attributed to posts published within {attributionResults[selectedWindow].windowDays} day{attributionResults[selectedWindow].windowDays > 1 ? 's' : ''} before signup
+              </p>
+            </div>
+
+            {/* Attribution Summary Stats */}
+            <div className="grid grid-cols-3 gap-4 p-6 border-b border-gray-100">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-gray-900">
+                  {attributionResults[selectedWindow].totalAttributed.toLocaleString()}
+                </p>
+                <p className="text-sm text-gray-500">Attributed</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-gray-900">
+                  {attributionResults[selectedWindow].organicSignups.toLocaleString()}
+                </p>
+                <p className="text-sm text-gray-500">Organic / Unknown</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-orange-500">
+                  {attributionResults[selectedWindow].attributionCoverage}%
+                </p>
+                <p className="text-sm text-gray-500">Coverage</p>
+              </div>
+            </div>
+
+            {/* Top Posts Bar Chart */}
+            {attributionResults[selectedWindow].postAttributions.length > 0 && (
+              <div className="p-6 border-b border-gray-100">
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart
+                    data={attributionResults[selectedWindow].postAttributions.slice(0, 10)}
+                    layout="vertical"
+                    margin={{ left: 20, right: 20 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis type="number" tick={{ fontSize: 12 }} />
+                    <YAxis
+                      type="category"
+                      dataKey="title"
+                      width={200}
+                      tick={{ fontSize: 11 }}
+                      tickFormatter={(value) => value.length > 30 ? value.slice(0, 30) + '...' : value}
+                    />
+                    <Tooltip
+                      formatter={(value) => [Number(value).toLocaleString(), 'Subscribers']}
+                      labelFormatter={(label) => label}
+                    />
+                    <Bar dataKey="attributedTotal" fill="#f97316" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* Attribution Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Post</th>
+                    <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Date</th>
+                    <th className="text-right px-6 py-3 text-sm font-medium text-gray-500">Total</th>
+                    <th className="text-right px-6 py-3 text-sm font-medium text-gray-500">Paid</th>
+                    <th className="text-right px-6 py-3 text-sm font-medium text-gray-500">Free</th>
+                    <th className="text-right px-6 py-3 text-sm font-medium text-gray-500">Avg Days</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {attributionResults[selectedWindow].postAttributions.slice(0, 20).map((post, index) => (
+                    <tr key={post.post_id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-gray-400 w-6">{index + 1}</span>
+                          <span className="font-medium text-gray-900 truncate max-w-md">{post.title}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {format(new Date(post.post_date), 'MMM d, yyyy')}
+                      </td>
+                      <td className="px-6 py-4 text-right font-semibold text-gray-900">
+                        {post.attributedTotal.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm text-gray-600">
+                        {post.attributedPaid.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm text-gray-600">
+                        {post.attributedFree.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm text-gray-500">
+                        {post.avgDaysToSignup}d
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {attributionResults[selectedWindow].postAttributions.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  No posts attributed subscribers in this window
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Recent Posts Table */}
         <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">

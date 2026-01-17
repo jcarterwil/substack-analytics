@@ -1,6 +1,6 @@
 import JSZip from 'jszip'
 import Papa from 'papaparse'
-import type { PostMetadata, Subscriber, SubscriberStats, MonthlyTrend, AnalysisResult } from './types'
+import type { PostMetadata, Subscriber, SubscriberStats, MonthlyTrend, AnalysisResult, PostAttribution, AttributionResult } from './types'
 
 interface RawPostRow {
   post_id: string
@@ -134,30 +134,151 @@ function calculateMonthlyTrends(posts: PostMetadata[], stats: SubscriberStats): 
   })
 }
 
+function calculatePostAttributions(
+  posts: PostMetadata[],
+  subscribers: Subscriber[],
+  windowDays: number
+): AttributionResult {
+  // Filter to published posts with dates, sorted by date descending (most recent first)
+  const publishedPosts = posts
+    .filter(p => p.is_published && p.post_date)
+    .sort((a, b) => new Date(b.post_date!).getTime() - new Date(a.post_date!).getTime())
+
+  // Initialize attribution tracking for each post
+  const attributionMap = new Map<string, {
+    post: PostMetadata
+    total: number
+    paid: number
+    free: number
+    daysTotals: number[]
+  }>()
+
+  for (const post of publishedPosts) {
+    attributionMap.set(post.post_id, {
+      post,
+      total: 0,
+      paid: 0,
+      free: 0,
+      daysTotals: [],
+    })
+  }
+
+  const windowMs = windowDays * 24 * 60 * 60 * 1000
+  let organicSignups = 0
+
+  // Attribute each subscriber to a post
+  for (const subscriber of subscribers) {
+    if (!subscriber.created_at) {
+      organicSignups++
+      continue
+    }
+
+    const signupTime = new Date(subscriber.created_at).getTime()
+    const isPaid = subscriber.first_payment_at !== null &&
+                   ['yearly', 'monthly', 'founding'].includes(subscriber.plan)
+
+    // Find the most recent post published within the window before signup
+    let attributedPost: PostMetadata | null = null
+    let daysToSignup = 0
+
+    for (const post of publishedPosts) {
+      const postTime = new Date(post.post_date!).getTime()
+
+      // Post must be published before or on signup date, within window
+      if (postTime <= signupTime && signupTime - postTime <= windowMs) {
+        attributedPost = post
+        daysToSignup = Math.floor((signupTime - postTime) / (24 * 60 * 60 * 1000))
+        break // Most recent post wins (list is sorted descending)
+      }
+    }
+
+    if (attributedPost) {
+      const attr = attributionMap.get(attributedPost.post_id)!
+      attr.total++
+      if (isPaid) attr.paid++
+      else attr.free++
+      attr.daysTotals.push(daysToSignup)
+    } else {
+      organicSignups++
+    }
+  }
+
+  // Build results array
+  const postAttributions: PostAttribution[] = []
+  for (const [postId, attr] of attributionMap.entries()) {
+    if (attr.total > 0) {
+      const avgDays = attr.daysTotals.length > 0
+        ? attr.daysTotals.reduce((a, b) => a + b, 0) / attr.daysTotals.length
+        : 0
+
+      postAttributions.push({
+        post_id: postId,
+        title: attr.post.title,
+        post_date: attr.post.post_date!,
+        attributedTotal: attr.total,
+        attributedPaid: attr.paid,
+        attributedFree: attr.free,
+        avgDaysToSignup: Math.round(avgDays * 10) / 10,
+      })
+    }
+  }
+
+  // Sort by total attributed descending
+  postAttributions.sort((a, b) => b.attributedTotal - a.attributedTotal)
+
+  const totalAttributed = postAttributions.reduce((sum, p) => sum + p.attributedTotal, 0)
+  const totalSubscribers = subscribers.length
+
+  return {
+    windowDays,
+    postAttributions,
+    organicSignups,
+    totalAttributed,
+    attributionCoverage: totalSubscribers > 0
+      ? Math.round((totalAttributed / totalSubscribers) * 1000) / 10
+      : 0,
+  }
+}
+
 export async function parseSubstackZip(file: File): Promise<AnalysisResult> {
   const zip = await JSZip.loadAsync(file)
 
-  // Find posts.csv
+  // Find posts.csv and HTML files
   let postsCSV = ''
   let subscribersCSV = ''
   const htmlContents: Map<string, string> = new Map()
 
-  for (const [filename, zipEntry] of Object.entries(zip.files)) {
-    if (zipEntry.dir) continue
+  // First pass: find all files and categorize them
+  const allFiles = Object.entries(zip.files).filter(([, entry]) => !entry.dir)
 
+  console.log('Files in zip:', allFiles.map(([name]) => name))
+
+  for (const [filename, zipEntry] of allFiles) {
     const normalizedPath = filename.replace(/\\/g, '/')
+    const lowercasePath = normalizedPath.toLowerCase()
 
-    if (normalizedPath.endsWith('posts.csv')) {
+    // Find posts.csv (could be at root or in a subfolder)
+    if (lowercasePath.endsWith('posts.csv')) {
       postsCSV = await zipEntry.async('string')
-    } else if (normalizedPath.includes('email_list') && normalizedPath.endsWith('.csv')) {
+      console.log('Found posts.csv at:', normalizedPath)
+    }
+    // Find email list CSV
+    else if (lowercasePath.includes('email_list') && lowercasePath.endsWith('.csv')) {
       subscribersCSV = await zipEntry.async('string')
-    } else if (normalizedPath.includes('/posts/') && normalizedPath.endsWith('.html')) {
+      console.log('Found email list at:', normalizedPath)
+    }
+    // Find HTML files - be more flexible about path structure
+    else if (lowercasePath.endsWith('.html')) {
       const htmlFilename = normalizedPath.split('/').pop() || ''
       const { id } = parsePostId(htmlFilename.replace('.html', ''))
       const content = await zipEntry.async('string')
       htmlContents.set(id, content)
+      console.log('Found HTML file:', htmlFilename, 'ID:', id, 'Size:', content.length)
     }
   }
+
+  console.log('Total HTML files found:', htmlContents.size)
+  console.log('HTML IDs:', Array.from(htmlContents.keys()).slice(0, 10))
 
   if (!postsCSV) {
     throw new Error('No posts.csv found in the zip file. Please upload a valid Substack export.')
@@ -166,11 +287,36 @@ export async function parseSubstackZip(file: File): Promise<AnalysisResult> {
   // Parse posts
   let posts = parsePostsCSV(postsCSV)
 
-  // Attach HTML content
-  posts = posts.map(post => ({
-    ...post,
-    htmlContent: htmlContents.get(post.post_id),
-  }))
+  console.log('Posts from CSV:', posts.length)
+  console.log('Sample post IDs from CSV:', posts.slice(0, 5).map(p => p.post_id))
+
+  // Attach HTML content - try multiple matching strategies
+  posts = posts.map(post => {
+    // Try exact match first
+    let content = htmlContents.get(post.post_id)
+
+    // If no match, try to find by partial match
+    if (!content) {
+      for (const [htmlId, htmlContent] of htmlContents.entries()) {
+        if (htmlId.startsWith(post.post_id) || post.post_id.startsWith(htmlId)) {
+          content = htmlContent
+          break
+        }
+      }
+    }
+
+    if (content) {
+      console.log('Matched post:', post.post_id, 'Content size:', content.length)
+    }
+
+    return {
+      ...post,
+      htmlContent: content,
+    }
+  })
+
+  const postsWithContent = posts.filter(p => p.htmlContent).length
+  console.log('Posts with HTML content:', postsWithContent)
 
   // Parse subscribers (may be empty if not included)
   const subscribers = subscribersCSV ? parseSubscribersCSV(subscribersCSV) : []
@@ -189,11 +335,17 @@ export async function parseSubstackZip(file: File): Promise<AnalysisResult> {
     })
     .slice(0, 10)
 
+  // Calculate attribution for multiple windows
+  const attributionResults = subscribers.length > 0
+    ? [1, 2, 7].map(days => calculatePostAttributions(posts, subscribers, days))
+    : []
+
   return {
     posts,
     subscribers,
     subscriberStats,
     monthlyTrends,
     topPosts,
+    attributionResults,
   }
 }

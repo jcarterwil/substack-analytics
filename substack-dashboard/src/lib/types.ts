@@ -39,10 +39,29 @@ export interface MonthlyTrend {
   subscribers: number
 }
 
+export interface PostAttribution {
+  post_id: string
+  title: string
+  post_date: string
+  attributedTotal: number
+  attributedPaid: number
+  attributedFree: number
+  avgDaysToSignup: number
+}
+
+export interface AttributionResult {
+  windowDays: number
+  postAttributions: PostAttribution[]
+  organicSignups: number
+  totalAttributed: number
+  attributionCoverage: number
+}
+
 export interface AnalysisResult {
   posts: PostMetadata[]
   subscribers: Subscriber[]
   subscriberStats: SubscriberStats
   monthlyTrends: MonthlyTrend[]
   topPosts: PostMetadata[]
+  attributionResults: AttributionResult[]
 }
